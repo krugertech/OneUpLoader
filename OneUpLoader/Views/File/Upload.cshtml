@@ -1,0 +1,65 @@
+﻿@{
+    ViewBag.Title = "Upload";
+}
+
+<script language="javascript">
+    
+    var uploadComplete = function () {
+        //var formData = new FormData();
+        //formData.append('fileName', file.name);
+        //formData.append('completed', true);
+
+        //var xhr2 = new XMLHttpRequest();
+        //xhr2.open("POST", "/Files/UploadComplete", true); //combine the chunks together
+        //xhr2.send(formData);
+
+        alert('Complete');
+    }
+
+    function upload(file) {
+        var blob = file;
+        var BYTES_PER_CHUNK = 32768; // sample chunk sizes.
+        var SIZE = blob.size;
+
+        //upload content
+        var start = 0;
+        var end = BYTES_PER_CHUNK;
+        var completed = 0;
+        var count = SIZE % BYTES_PER_CHUNK == 0 ? SIZE / BYTES_PER_CHUNK : Math.floor(SIZE / BYTES_PER_CHUNK) + 1;
+
+        while (start < SIZE) {
+            var chunk = blob.webkitSlice(start, end);
+            var xhr = new XMLHttpRequest();
+            xhr.onload = function () {
+                completed = completed + 1;
+                if (completed === count) {
+                    uploadComplete();
+                }
+            };
+            xhr.open("POST", "/File/Upload", true);
+            xhr.send(chunk);
+
+            start = end;
+            end = start + BYTES_PER_CHUNK;
+        }
+    }
+
+</script>
+
+<div class="jumbotron">
+    <h1>TODO</h1>
+    <p class="lead">Create simple file upload page.</p>
+    
+    <br /><br />
+    <input type="file" id="myfile" name="myfile" />
+    <input type="button" id="btnUpload" name="btnUpload" onclick="upload(myfile);" />
+</div>
+
+<div class="row">  
+    <div class="col-md-4">
+        <h2>Parts</h2>
+        <p>1. Create file upload control</p>
+        <p>2. Wire even to jscript</p>
+        <p>3. Test uploading...</p>        
+    </div>
+</div>

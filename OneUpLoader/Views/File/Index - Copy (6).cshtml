@@ -1,0 +1,394 @@
+﻿@{
+    ViewBag.Title = "File Uploader";
+}
+<script src="~/Scripts/spark-md5.js"></script>
+<script language="javascript">
+    // Check for the various File API support.
+    if (XMLHttpRequest && window.File && window.FileReader && window.FileList && window.Blob)
+    {
+        // Great success! All the File APIs are supported.
+    } else
+    {
+        alert('The File APIs are not fully supported in this browser.');
+    }
+
+    function transfer_complete(e) {        
+        console.log("The transfer is complete.");
+        //$("#complete").html('Upload complete');
+    }
+    function transfer_failed(e) { console.log("An error occurred while transferring the file."); }
+    function transfer_canceled(e) { console.log("The transfer has been canceled by the user."); }
+    function progressUpdate(event)
+    {
+        // Not relative to chunked upload.
+        //if (event.lengthComputable)
+        //{
+        //    //alert(event);
+        //    var percent = event.loaded / event.total * 100;
+        //    $("#progress").html(percent + "%");                    
+        //} else {
+        //    $("#progress").html($("#progress").html() + "...");
+        //}
+    }
+
+    //function checkFile(inputFile) {
+    //    var file = inputFile.files[0];
+    //    getServerFileDetails(file);        
+    //}
+
+    function upload(fileIndex)
+    {
+        // Get some file info
+        var file = document.getElementById("inputFile").files[fileIndex];
+
+        var chunkSize = 512384; // 0.5MByte chunks
+        var start = 0;
+        var end = chunkSize;
+        var completedChunks = 0;
+        var totalChunks = file.size % chunkSize === 0 ? file.size / chunkSize : Math.floor(file.size / chunkSize) + 1;
+
+        // Store variables in easy to manage object/class
+        var objFile = {};        
+        objFile.index = fileIndex;
+        objFile.file = file;        
+        objFile.start = start;
+        objFile.end = end;
+        objFile.completedChunks = completedChunks;
+        objFile.totalChunks = totalChunks;
+        objFile.chunkSize = chunkSize;
+        objFile.error = false;
+
+        uploadFile(objFile);
+    }
+    function uploadFile(objFile)
+    {
+        var chunk = objFile.file.slice(objFile.start, objFile.end);
+
+        var xhr = new XMLHttpRequest();
+        xhr.addEventListener("load", transfer_complete, false);
+        xhr.addEventListener("error", transfer_failed, false);
+        xhr.addEventListener("abort", transfer_canceled, false);
+        if (xhr.upload)
+            xhr.upload.onprogress = progressUpdate;
+        xhr.onprogress = progressUpdate;
+        xhr.onreadystatechange = function () {
+            if (objFile.error)
+                return;
+
+            if (xhr.readyState === 4) {
+                //if (xhr.status >= 200 && xhr.status < 300)
+                if (xhr.status === 200) {
+                    objFile.start = objFile.end;
+                    objFile.end = objFile.start + objFile.chunkSize;
+                    objFile.completedChunks++;
+
+                    // Update progress.
+                    var percent = Math.round((objFile.completedChunks / objFile.totalChunks * 100));                               
+                    $("#fileProgress" + objFile.index).attr('aria-valuenow', percent);
+                    $("#fileProgress" + objFile.index).children().text(percent + '%');
+                    $("#fileProgress" + objFile.index).children().css('width', percent);
+
+                    if (objFile.start < objFile.file.size)
+                        uploadNextChunk(xhr, objFile);
+                } else {
+                    console.log("Error", xhr.statusText);
+                    objFile.error = true;
+                }
+            }
+        }
+
+        xhr.open("POST", "/File/Upload?fileName=" + objFile.file.name, true);
+        xhr.send(chunk);
+    }
+    function uploadNextChunk(xhr, objFile)
+    { 
+        var chunk = objFile.file.slice(objFile.start, objFile.end);
+
+        this.xhr = new XMLHttpRequest();
+        xhr.addEventListener("load", transfer_complete, false);
+        xhr.addEventListener("error", transfer_failed, false);
+        xhr.addEventListener("abort", transfer_canceled, false);
+        if (xhr.upload)
+            xhr.upload.onprogress = progressUpdate;
+        xhr.onprogress = progressUpdate;
+        //xhr.onreadystatechange = request_complete(xhr, objFile);
+        xhr.onreadystatechange = function () {
+            if (objFile.error)
+                return;
+
+            if (xhr.readyState === 4) {
+                //if (xhr.status >= 200 && xhr.status < 300)
+                if (xhr.status === 200) {
+                    objFile.start = objFile.end;
+                    objFile.end = objFile.start + objFile.chunkSize;
+                    objFile.completedChunks++;
+
+                    // Update progress.
+                    var percent = Math.round((objFile.completedChunks / objFile.totalChunks * 100));
+                    $("#fileProgress" + objFile.index).attr('aria-valuenow', percent);
+                    $("#fileProgress" + objFile.index).children().text(percent + '%');
+                    $("#fileProgress" + objFile.index).children().css('width', percent);
+
+                    if (objFile.start < objFile.file.size)
+                        uploadNextChunk(xhr, objFile);
+                } else {
+                    alert("Error: status=" + xhr.status + " and reason=" +  xhr.statusText);
+                    console.log("Error", xhr.statusText);
+                    objFile.error = true;
+                }
+            }
+        }
+
+        xhr.open("POST", "/File/Upload?fileName=" + objFile.file.name, true);
+        xhr.send(chunk);
+    }
+    function serverFileDetails(inputFile) {
+        var file = inputFile.files[0];                 
+
+        $.ajax({
+            type: 'get',
+            dataType: 'json',
+            cache: false,
+            url: '/File/Details?fileName=' + file.name + '&fileLength=' + file.size,
+            //data: null,//{ keyid: 1, newval: 10 },
+            success: function (response, textStatus, jqXHR) {
+                $("#myfile").data('serverFile', response);
+                $("#status").html('server: exists='+ response.exists + ' and filesize=' + response.fileLength + ' and hash=' + response.hash);
+            },
+            error: function (jqXHR, textStatus, errorThrown) {
+                alert('Error - ' + errorThrown);
+            }
+        });
+    }
+</script>
+
+<div class="jumbotron">
+    Upload
+</div>
+
+<style>
+    .bd-example {
+        padding: 1.5rem;
+        margin-right: 0;
+        margin-bottom: 0;
+        margin-left: 0;
+        border-width: .2rem;
+
+        border: solid #f7f7f9;
+        border-top-width: medium;
+        border-right-width: medium;
+        border-bottom-width: medium;
+        border-left-width: medium;
+}    
+
+</style>
+
+<div class="row">
+   <div class="col-md-12" style="font-size: 14px;">
+    <div>
+        <input type="file" id="inputFile" name="inputFile" value="Select file" onchange="getFiles(this)" multiple />
+    </div>
+       <br/>
+              
+    <div>
+        <table class="table table-responsive">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Filename</th>
+                    <th>Status</th>
+                    <th style="width:100px;">Progress</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="divfiles"></tbody>
+        </table>
+    </div> 
+   </div>
+</div>
+
+<script id="template-upload" type="text/x-tmpl">
+    {% for (var i=0; i < o.length; i++) { %}
+    <tr id="uiFile{%=i%}"><!--class="template-upload fade"-->
+        <th scope="row">{%=(i+1)%}</th>
+        <td style="word-wrap: break-word;min-width: 160px;max-width: 160px;">
+            <p class="name">{%=o[i].name%}</p>
+            <strong class="error text-danger"></strong>
+        </td>
+        <td>
+            <p class="size">Uploading (12KB/sec)...</p>
+        </td>
+        <td style="width:100px;">
+            <div id="fileProgress{%=i%}" style="width:100%" class="progress progress-striped active" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="progress-bar progress-bar-success" style="width:0%;"></div>
+            </div>
+            <!--<div class="progress">
+            <div id="fileProgress{%=i%}" class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%">0%</div>
+        </div>--->
+        </td>
+        <td>            
+            <button class="btn btn-primary btn-xs start" onclick="upload({%=i%});">
+                <i class="glyphicon glyphicon-upload"></i>
+                <span>Start</span>
+            </button>
+            <button class="btn btn-warning btn-xs cancel" disabled onclick="cancel({%=i%});">
+                <i class="glyphicon glyphicon-ban-circle"></i>
+                <span>Stop</span>
+            </button>
+        </td>
+    </tr>
+    {% } %}
+</script>
+
+<script>
+        /*
+         * JavaScript Templates
+         * https://github.com/blueimp/JavaScript-Templates
+         *
+         * Copyright 2011, Sebastian Tschan
+         * https://blueimp.net
+         *
+         * Licensed under the MIT license:
+         * https://opensource.org/licenses/MIT
+         *
+         * Inspired by John Resig's JavaScript Micro-Templating:
+         * http://ejohn.org/blog/javascript-micro-templating/
+         */
+
+        /* global define */
+        ;
+        (function($) {
+            'use strict'
+            var tmpl = function(str, data) {
+                var f = !/[^\w\-\.:]/.test(str)
+                    ? tmpl.cache[str] = tmpl.cache[str] || tmpl(tmpl.load(str))
+                    : new Function(// eslint-disable-line no-new-func
+                        tmpl.arg + ',tmpl',
+                        'var _e=tmpl.encode' +
+                        tmpl.helper +
+                        ",_s='" +
+                        str.replace(tmpl.regexp, tmpl.func) +
+                        "';return _s;"
+                    )
+                return data
+                    ? f(data, tmpl)
+                    : function(data) {
+                        return f(data, tmpl)
+                    }
+            }
+            tmpl.cache = {}
+            tmpl.load = function(id) {
+                return document.getElementById(id).innerHTML
+            }
+            tmpl.regexp = /([\s'\\])(?!(?:[^{]|\{(?!%))*%\})|(?:\{%(=|#)([\s\S]+?)%\})|(\{%)|(%\})/g
+            tmpl.func = function(s, p1, p2, p3, p4, p5) {
+                if (p1) { // whitespace, quote and backspace in HTML context
+                    return {
+                            '\n': '\\n',
+                            '\r': '\\r',
+                            '\t': '\\t',
+                            ' ': ' '
+                        }[p1] ||
+                        '\\' + p1
+                }
+                if (p2) { // interpolation: {%=prop%}, or unescaped: {%#prop%}
+                    if (p2 === '=') {
+                        return "'+_e(" + p3 + ")+'"
+                    }
+                    return "'+(" + p3 + "==null?'':" + p3 + ")+'"
+                }
+                if (p4) { // evaluation start tag: {%
+                    return "';"
+                }
+                if (p5) { // evaluation end tag: %}
+                    return "_s+='"
+                }
+            }
+            tmpl.encReg = /[<>&"'\x00]/g // eslint-disable-line no-control-regex
+            tmpl.encMap = {
+                '<': '&lt;',
+                '>': '&gt;',
+                '&': '&amp;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }
+            tmpl.encode = function(s) {
+                return (s == null ? '' : '' + s).replace(
+                    tmpl.encReg,
+                    function(c) {
+                        return tmpl.encMap[c] || ''
+                    }
+                )
+            }
+            tmpl.arg = 'o'
+            tmpl.helper = ",print=function(s,e){_s+=e?(s==null?'':s):_e(s);}" +
+                ',include=function(s,d){_s+=tmpl(s,d);}'
+            if (typeof define === 'function' && define.amd) {
+                define(function() {
+                    return tmpl
+                })
+            } else if (typeof module === 'object' && module.exports) {
+                module.exports = tmpl
+            } else {
+                $.tmpl = tmpl
+            }
+        }(this));
+</script>
+<script>
+
+    function getFiles(fileElement) {
+        var files = fileElement.files;// document.getElementById("inputFile").files;
+
+        var gennedTemplate = tmpl("template-upload", files);
+        document.getElementById("divfiles").innerHTML += gennedTemplate;
+    }
+
+    function loadFiles(inputF) {
+        // var data = inputF.files;
+        // document.getElementById("divfiles").innerHTML = tmpl("template-upload", data);
+    }
+</script>
+
+<script>
+    //document.getElementById('file1').addEventListener('change', function () {
+    //    var blobSlice = File.prototype.slice || File.prototype.mozSlice || File.prototype.webkitSlice,
+    //        file = this.files[0],
+    //        chunkSize = 2097152,                             // Read in chunks of 2MB
+    //        chunks = Math.ceil(file.size / chunkSize),
+    //        currentChunk = 0,
+    //        spark = new SparkMD5.ArrayBuffer(),
+    //        fileReader = new FileReader();
+
+    //    fileReader.onload = function (e) {
+    //        console.log('read chunk nr', currentChunk + 1, 'of', chunks);
+    //        spark.append(e.target.result);                   // Append array buffer
+    //        currentChunk++;
+
+    //        document.getElementById('info').innerHTML = '' + (Math.round(currentChunk / chunks)*100) + '%';
+
+    //        if (currentChunk < chunks) {
+    //            setTimeout(loadNext(), 10);
+    //            //loadNext();
+    //        } else {
+    //            console.log('finished loading');
+    //            console.info('computed hash', spark.end());  // Compute hash
+    //            document.getElementById('info').innerHTML = 'finished!';
+    //        }
+    //    };
+
+    //    fileReader.onerror = function () {
+    //        console.warn('oops, something went wrong.');
+    //    };
+
+    //    function loadNext() {
+    //        var start = currentChunk * chunkSize,
+    //            end = ((start + chunkSize) >= file.size) ? file.size : start + chunkSize;
+
+    //        setTimeout(fileReader.readAsArrayBuffer(blobSlice.call(file, start, end)), 1);
+    //        //fileReader.readAsArrayBuffer(blobSlice.call(file, start, end));
+    //    }
+
+    //    loadNext();
+    //});
+
+</script>

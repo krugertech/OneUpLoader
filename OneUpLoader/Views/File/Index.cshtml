@@ -1,0 +1,660 @@
+﻿@{
+    ViewBag.Title = "Enterprise File Uploader";
+}
+
+<style>
+    #dropContainer.hover {
+        /*/height: 100px;*/
+        border: 7px dashed #ccc !important;
+    }
+</style>
+
+<!-- Start Content -->
+
+<div class="jumbotron">
+    Upload
+</div>
+<div class="row" id="dropContainer" class="dropContainer_hidden">
+    <div class="col-md-12" style="font-size: 14px;">
+        <div class="row fileupload-buttonbar">
+            <div class="col-lg-12">
+                <!-- The fileinput-button span is used to style the file input field as button -->                    
+                <span id="fileUploadControls">
+                    <label id="inputFileContainer0" class="btn btn-default" for="inputFile0">
+                        <input id="inputFile0" type="file" style="display:none" onchange="getFiles(this)" multiple>
+                        <i class="glyphicon glyphicon-plus"></i> Choose file...
+                    </label>
+                </span>
+                <button type="submit" class="btn btn-primary" onclick="uploadAll();">
+                    <i class="glyphicon glyphicon-upload"></i>
+                    <span>Start upload</span>
+                </button>
+                <button type="reset" class="btn btn-warning" onclick="alert('not implemented!');" disabled>
+                    <i class="glyphicon glyphicon-ban-circle"></i>
+                    <span>Cancel upload</span>
+                </button>
+                <button type="button" class="btn btn-danger" onclick="alert('not implemented!');" disabled>
+                    <i class="glyphicon glyphicon-trash"></i>
+                    <span>Delete</span>
+                </button>
+                <span style="float: right; padding-top: 7px;">
+                    <!--https://stackoverflow.com/questions/29575437/how-to-customize-bootstrap-switch-color-->
+                    <input type="checkbox" checked onchange="resumeChanged(this)" data-toggle="toggle" data-on="Resume" data-off="Resume off" data-onstyle="success" data-offstyle="warning" data-size="mini">                   
+                    <input type="checkbox" checked onchange="speedChanged(this)" data-toggle="toggle" data-on="Fast Connection" data-off="Slow Connection" data-onstyle="success" data-offstyle="warning" data-size="mini">
+                </span>
+            </div>
+        </div>
+        <div>
+            <table class="table table-responsive">
+                <thead>
+                    <tr>
+                        <th style="width: 5%;">#</th>
+                        <th style="width: 40%;">Filename</th>
+                        <th style="width: 8%;">Size</th>
+                        <th style="width: 20%;">Status</th>
+                        <th style="width: 15%;">Progress</th>
+                        <th style="width: 17%;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tblUploadBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- End Content -->
+
+<!-- Start Templates -->
+
+<script id="template-upload" type="text/x-tmpl">
+    {% for (var i=0; i < o.length; i++) { %}
+    <tr id="uiFile{%=findex%}">
+        <th scope="row">{%=(findex+1)%}</th>
+        <td style="word-wrap: break-word;min-width: 160px;max-width: 160px;">
+            <p class="name">{%=((o[i].name.length > 40) ? o[i].name.substr(0,41) + "..." : o[i].name)%}</p>
+            <strong class="error text-danger"></strong>
+        </td>
+        <td>
+            <p class="size">{%=formatBytes(o[i].size, 2)%}</p>
+        </td>
+        <td>
+            <p id="fileStatus{%=findex%}" class="size">Pending </p>
+        </td>
+        <td>
+            <div id="fileProgress{%=findex%}" style="width: 100%;" class="progress progress-striped active" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="progress-bar progress-bar-success" style="width:0%;padding-top:2px;"></div>
+            </div>
+        </td>
+        <td>
+            <button class="btn btn-primary btn-xs start" onclick="startUpload({%=findex%});">
+                <i class="glyphicon glyphicon-upload"></i>
+                <span>Start</span>
+            </button>
+            <button class="btn btn-warning btn-xs cancel" onclick="stopUpload({%=findex%});">
+                <i class="glyphicon glyphicon-ban-circle"></i>
+                <span>Stop</span>
+            </button>
+            @*<input type="checkbox" checked onchange="manageUpload(this, {%=findex%});" data-toggle="toggle" data-on="Start" data-off="Stop" data-onstyle="success" data-offstyle="warning" data-size="mini" onload="$(this).bootstrapSwitch('state', true);">*@
+        </td>
+    </tr>
+    {%findex++;%}
+    {% } %}
+
+</script>
+<script id="template-inputFile" type="text/x-tmpl">
+    <label id="inputFileContainer{%=o%}" class="btn btn-default" for="inputFile{%=o%}">
+        <input id="inputFile{%=o%}" type="file" style="display:none" onchange="getFiles(this)" multiple>
+        <i class="glyphicon glyphicon-plus"></i> Choose file...
+    </label>
+</script>
+
+<!-- End Templates -->
+
+<!-- Start Scripts -->
+@section scripts {
+    <link href="https://gitcdn.github.io/bootstrap-toggle/2.2.2/css/bootstrap-toggle.min.css" rel="stylesheet"/> <!-- Used for the Auto Resume and Connection Speed settings only -->
+    <script src="https://gitcdn.github.io/bootstrap-toggle/2.2.2/js/bootstrap-toggle.min.js"></script>
+    <script src="//cdn.rawgit.com/satazor/SparkMD5/master/spark-md5.min.js"></script>
+    <script>
+        /*
+         * JavaScript Templates
+         * https://github.com/blueimp/JavaScript-Templates
+         *
+         * Copyright 2011, Sebastian Tschan
+         * https://blueimp.net
+         *
+         * Licensed under the MIT license:
+         * https://opensource.org/licenses/MIT
+         *
+         * Inspired by John Resig's JavaScript Micro-Templating:
+         * http://ejohn.org/blog/javascript-micro-templating/
+         */
+
+        /* global define */
+        ;
+        (function($) {
+            'use strict'
+            var tmpl = function(str, data) {
+                var f = !/[^\w\-\.:]/.test(str)
+                    ? tmpl.cache[str] = tmpl.cache[str] || tmpl(tmpl.load(str))
+                    : new Function(// eslint-disable-line no-new-func
+                        tmpl.arg + ',tmpl',
+                        'var _e=tmpl.encode' +
+                        tmpl.helper +
+                        ",_s='" +
+                        str.replace(tmpl.regexp, tmpl.func) +
+                        "';return _s;"
+                    )
+                return data
+                    ? f(data, tmpl)
+                    : function(data) {
+                        return f(data, tmpl)
+                    }
+            }
+            tmpl.cache = {}
+            tmpl.load = function(id) {
+                return document.getElementById(id).innerHTML
+            }
+            tmpl.regexp = /([\s'\\])(?!(?:[^{]|\{(?!%))*%\})|(?:\{%(=|#)([\s\S]+?)%\})|(\{%)|(%\})/g
+            tmpl.func = function(s, p1, p2, p3, p4, p5) {
+                if (p1) { // whitespace, quote and backspace in HTML context
+                    return {
+                            '\n': '\\n',
+                            '\r': '\\r',
+                            '\t': '\\t',
+                            ' ': ' '
+                        }[p1] ||
+                        '\\' + p1
+                }
+                if (p2) { // interpolation: {%=prop%}, or unescaped: {%#prop%}
+                    if (p2 === '=') {
+                        return "'+_e(" + p3 + ")+'"
+                    }
+                    return "'+(" + p3 + "==null?'':" + p3 + ")+'"
+                }
+                if (p4) { // evaluation start tag: {%
+                    return "';"
+                }
+                if (p5) { // evaluation end tag: %}
+                    return "_s+='"
+                }
+            }
+            tmpl.encReg = /[<>&"'\x00]/g // eslint-disable-line no-control-regex
+            tmpl.encMap = {
+                '<': '&lt;',
+                '>': '&gt;',
+                '&': '&amp;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }
+            tmpl.encode = function(s) {
+                return (s == null ? '' : '' + s).replace(
+                    tmpl.encReg,
+                    function(c) {
+                        return tmpl.encMap[c] || ''
+                    }
+                )
+            }
+            tmpl.arg = 'o'
+            tmpl.helper = ",print=function(s,e){_s+=e?(s==null?'':s):_e(s);}" +
+                ',include=function(s,d){_s+=tmpl(s,d);}'
+            if (typeof define === 'function' && define.amd) {
+                define(function() {
+                    return tmpl
+                })
+            } else if (typeof module === 'object' && module.exports) {
+                module.exports = tmpl
+            } else {
+                $.tmpl = tmpl
+            }
+        }(this));
+    </script>
+    <script language="javascript">
+        // When ready, wire up the drag and drop events.
+        $(document).ready(function() {
+            // dragover and dragenter events need to have 'preventDefault' called
+            // in order for the 'drop' event to register.
+            // See: https://developer.mozilla.org/en-US/docs/Web/Guide/HTML/Drag_operations#droptargets
+            dropContainer.ondragover = function(evt) {
+                this.className = 'hover';
+                evt.preventDefault();
+            };
+
+            dropContainer.ondragleave = function(evt) {
+                this.className = '';
+                evt.preventDefault();
+            };
+
+            dropContainer.ondrop = function(evt) {
+                // pretty simple -- but not for IE :(
+                // why microsoft why, why do you do this?
+                this.className = '';
+                getFiles(evt.dataTransfer);
+                evt.preventDefault();
+            };
+        });
+
+        /* Global variables */
+        var findex = 0; // store the unique index of each file template generated. //TODO: rename to UIIndex or similar
+        var totalFileInputs = 0; //rename to currentFileInputIndex
+        var fileCollection = new Array();
+        var autoResume = true;
+        var highSpeed = true;
+        var hashingEnabled = true;
+
+        /* Used to upload all items at the same time. */
+        function uploadAll() {
+            for (var i = 0; i < findex; i++) {
+                // Prevent closure on a variable modified in loop
+                (function(index) {
+                    setTimeout(function() { upload(index); }, 25);
+                })(i);
+            }
+        }
+
+        /* Used to upload a single item. */
+        function upload(fileIndex) {
+            // 64KByte chunks for slower connections like over international VPN's.
+            var chunkSize = (highSpeed) ? 512384 : 65535;
+
+            // Get the item in the collection by its index.
+            var item = fileCollection[fileIndex];
+
+            if (item.objFile && item.objFile.activeFlag && item.objFile.activeFlag === true)
+                return;
+
+            var objFile = {};
+            objFile.index = fileIndex;
+            objFile.file = item.file;
+            objFile.start = 0;
+            objFile.end = chunkSize;
+            objFile.completedChunks = 0;
+            objFile.totalChunks = item.file.size % chunkSize === 0
+                ? item.file.size / chunkSize
+                : Math.floor(item.file.size / chunkSize) + 1;
+            objFile.chunkSize = chunkSize;
+            objFile.error = false;
+            objFile.hash = null;
+            objFile.serverFile = null;
+            // Benchmark stats
+            objFile.lastUploadTime = new Date();
+            objFile.lastUploadBytes = 0;
+            objFile.resumeTimeout = 30;
+            // Flags
+            objFile.haltFlag = false; // upload halt flag is now false
+            objFile.activeFlag = true; // upload is now active
+
+            // Set reference to object to item in collection
+            item.objFile = objFile;
+
+            // Continue to verification...
+            verifyFile(objFile);
+        }
+
+        /* Checks if the file */
+        function verifyFile(objFile) {
+
+            objFile.error = false;
+            updateStatus(objFile.index, 'Checking file on server...', false);
+            updateProgressBarColour(objFile.index, false);
+
+            $.ajax({
+                type: 'GET',
+                dataType: 'json',
+                cache: false,
+                url: '/File/Details?name=' + fixedEncodeURIComponent(objFile.file.name) + '&size=' + objFile.file.size,
+                //data: null,//{ keyid: 1, newval: 10 },
+                success: function(response, textStatus, jqXHR) {
+
+                    var serverFile = {
+                        exists: false,
+                        size: 0,
+                        hash: ''
+                    };
+                    serverFile.exists = response.exists;
+                    serverFile.size = response.size;
+                    serverFile.hash = response.hash;
+
+                    // Resume from where the server file ended.
+                    objFile.start = serverFile.size;
+                    objFile.end = objFile.start + objFile.chunkSize;
+                    objFile.completedChunks = serverFile.size % objFile.chunkSize === 0
+                        ? serverFile.size / objFile.chunkSize
+                        : Math.floor(serverFile.size / objFile.chunkSize) + 1;
+                    objFile.serverFile = serverFile;
+
+                    // Resume.
+                    if (serverFile.exists === true) {
+                        if (objFile.file.size === serverFile.size) {
+                            updateStatus(objFile.index, 'File size matches server.', false);
+
+                            // hash the file to verify they are the same,
+                            if (hashingEnabled) {
+
+                                // Set the file start bytes back to server files total bytes
+                                // so that we only continue the upload from where we left off.
+                                objFile.start = serverFile.size;
+                            }
+                        } else
+                            updateStatus(objFile.index, 'File exists, resuming...', false);
+
+                    }
+
+                    // Hashing = on.
+                    if (hashingEnabled) {
+                        hashFile(objFile);
+                        // Hashing = off.
+                    } else {
+                        // Only upload when file sizes do not match.
+                        if (!objFile.file.size === serverFile.size)
+                            uploadFile(objFile);
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    objFile.error = true;
+                    objFile.activeFlag = false;
+
+                    updateStatus(objFile.index, 'Error (' + textStatus + '): ' + errorThrown, true);
+                    updateProgressBarColour(objFile.index, true);
+
+                    if (autoResume) {
+                        objFile.resumeTimeout = 5;
+                        // Start resuming in 5 seconds, but first display error for 3 seconds.
+                        setTimeout(function() { retryWait(objFile); }, 3000);
+                    }
+                },
+                async: true
+            });
+        }
+
+        /* MD5 Hash a local file */
+        function hashFile(objFile) {
+            // Hash local file up to size of server file else hash whole file.
+            var maxBytes = objFile.file.size !== objFile.serverFile.size ? objFile.serverFile.size : objFile.file.size,
+                chunkSize = 2049536, // read in chunks of 2MegaBytes
+                chunks = Math.ceil(maxBytes / chunkSize),
+                currentChunk = 0,
+                spark = new SparkMD5.ArrayBuffer(),
+                frOnload = function(e) {
+                    updateStatus(objFile.index, "Hashing chunk " + parseInt(currentChunk + 1) + " of " + chunks);
+
+                    // append array buffer
+                    spark.append(e.target.result);
+                    currentChunk++;
+                    if (currentChunk < chunks) {
+                        if (objFile.haltFlag === true) {
+                            updateStatus(objFile.index, 'Upload stopped.');
+                            objFile.activeFlag = false;
+                            return;
+                        }
+                        loadNext();
+                    } else {
+                        updateStatus(objFile.index, "Hashing complete.");
+                        objFile.hash = spark.end().toUpperCase();
+                        validateUpload(objFile);
+                    }
+                },
+                frOnerror = function() {
+                    updateStatus(objFile.index, "Hashing error on chunk " + currentChunk, true);
+                },
+                loadNext = function() {
+                    var blobSlice = File.prototype.slice || File.prototype.mozSlice || File.prototype.webkitSlice;
+                    var fileReader = new FileReader();
+                    fileReader.onload = frOnload;
+                    fileReader.onerror = frOnerror;
+                    var start = currentChunk * chunkSize,
+                        end = ((start + chunkSize) >= maxBytes) ? maxBytes : start + chunkSize;
+                    fileReader.readAsArrayBuffer(blobSlice.call(objFile.file, start, end));
+                };
+
+            loadNext();
+        }
+
+        /* Handles conditions which determine if a
+           file will be uploaded or not. */
+        function validateUpload(objFile) {
+            // debug:
+            //alert('server hash=' + objFile.serverFile.hash + '\r\n&local hash=' + objFile.hash);
+
+            // New file: If file does not exist.
+            if (objFile.serverFile.size == 0) {
+                uploadFile(objFile);
+            }
+            // If file size and hashes match.
+            else if (objFile.file.size == objFile.serverFile.size && objFile.serverFile.hash == objFile.hash) {
+                updateStatus(objFile.index, "File already uploaded.");
+                updateProgress(objFile.index, 100);
+                updateProgressBarColour(objFile.index, false);
+            }
+            // Error: file same size but hashes differ
+            else if (objFile.file.size == objFile.serverFile.size && objFile.serverFile.hash != objFile.hash) {
+                updateStatus(objFile.index, "Error 1015 - CRC mismatch. Delete and upload again.", true);
+            }
+            // Resume: local file size greater than server and hash matches
+            else if (objFile.file.size > objFile.serverFile.size && objFile.serverFile.hash == objFile.hash) {
+                uploadFile(objFile);
+            }
+            // Error: local file size greater than server and hash do NOT match
+            else if (objFile.file.size > objFile.serverFile.size && objFile.serverFile.hash != objFile.hash) {
+                updateStatus(objFile.index, "Error 1016 - CRC mismatch. Delete and upload again.", true);
+            }
+            // Error: Server file greater than local file.
+            else if (objFile.file.size < objFile.serverFile.size) {
+                updateStatus(objFile.index,
+                    "Error 1020 - Server file larger than local. Delete and upload again.",
+                    true);
+                // Error: Unknown.
+            } else {
+                updateStatus(objFile.index, "Error 1030 - Unknown error.", true);
+            }
+        }
+
+        /* Uploads the local file to the server */
+        function uploadFile(objFile) {
+            // TODO: Implement browser compatible slicing check here too.
+            var chunk = objFile.file.slice(objFile.start, objFile.end);
+
+            $.ajax({
+                type: 'POST',
+                url: "/File/Upload?name=" + fixedEncodeURIComponent(objFile.file.name),
+                data: chunk,
+                dataType: 'text',
+                contentType: 'application/octet-stream',
+                processData: false,
+                async: true,
+                cache: false,
+                success: function(response, textStatus, xhr) {
+
+                    if (xhr.readyState === 4) {
+                        // Note: >=200 && <300 would be more accurate than just checking for 200.
+                        //if (xhr.status >= 200 && xhr.status < 300)
+                        if (xhr.status === 200) {
+
+                            // Prevent possibility of 200+ code failure
+                            // which actually succeeds but is not supported
+                            if (objFile.error === true)
+                                return;
+
+                            if (objFile.haltFlag === true) {
+                                updateStatus(objFile.index, 'Upload stopped.');
+                                objFile.activeFlag = false;
+                                return;
+                            }
+
+                            objFile.start = objFile.end;
+                            objFile.end = objFile.start + objFile.chunkSize;
+                            objFile.completedChunks++;
+
+                            // Update statis
+                            if (objFile.completedChunks === objFile.totalChunks) {
+                                updateStatus(objFile.index, 'Complete.', false);
+                                objFile.activeFlag = false;
+                            } else {
+                                var duration = new Date().getTime() - objFile.lastUploadTime.getTime();
+                                if (duration >= 1000) {
+                                    var bytesUploaded = objFile.start - objFile.lastUploadBytes;
+                                    updateStatus(objFile.index,
+                                        'Uploading... (' + formatBytes(bytesUploaded, 2) + ' sec)',
+                                        false);
+
+                                    objFile.lastUploadTime = new Date();
+                                    objFile.lastUploadBytes = objFile.start;
+                                }
+                            }
+
+                            // Update progress.
+                            var percent = Math.round((objFile.completedChunks / objFile.totalChunks * 100));
+                            updateProgress(objFile.index, percent);
+
+                            if (objFile.start < objFile.file.size)
+                                uploadFile(objFile);
+                        } else {
+                            objFile.error = true;
+
+                            updateStatus(objFile.index,
+                                'Unsupported response (' + xhr.statusText + ') ' + textStatus,
+                                true);
+                            updateProgressBarColour(objFile.index, true);
+
+                            if (autoResume) {
+                                objFile.resumeTimeout = 5;
+                                // Start resuming in 5 seconds, but first display error for 3 seconds.
+                                setTimeout(function() { retryWait(objFile); }, 3000);
+                            }
+                        }
+                    }
+                },
+                error: function(xhr, textStatus, errorThrown) {
+                    objFile.error = true;
+                    objFile.activeFlag = false;
+
+                    updateStatus(objFile.index, 'Error (' + xhr.statusText + '): ' + xhr.errorThrown, true);
+                    updateProgressBarColour(objFile.index, true);
+
+                    if (autoResume) {
+                        objFile.resumeTimeout = 5;
+                        // Start resuming in 5 seconds, but first display error for 3 seconds.
+                        setTimeout(function() { retryWait(objFile); }, 3000);
+                    }
+                }
+            });
+        }
+
+        /* Provides a function for waiting between download retries.
+           Uses recursive function. */
+        function retryWait(objFile) {
+
+            if (autoResume === false) {
+                updateStatus(objFile.index, 'Retry aborted.', true);
+                objFile.activeFlag = false;
+                return;
+            }
+
+            if (objFile.resumeTimeout < 1) {
+                // objFile.error = false;
+                objFile.activeFlag = true;
+                verifyFile(objFile);
+            } else {
+                updateStatus(objFile.index, 'Retrying in ' + objFile.resumeTimeout + ' sec', false);
+                objFile.resumeTimeout = objFile.resumeTimeout - 1;
+                setTimeout(function() { retryWait(objFile); }, 1000);
+            }
+        }
+
+        /* Function is fired whenever any inputFileX is changed.
+           It generates a new file input and hides the previous one
+           allowing you to upload additional files if need be. */
+        function getFiles(fileElement) {
+            var files = fileElement.files;
+
+            // Add files to our fileCollection global var.
+            for (var i = 0; i < files.length; i++) {
+                fileCollection[fileCollection.length] = { file: files[i] };
+            }
+
+            // Add new file entries into html.
+            var uploadTemplate = tmpl("template-upload", files);
+            document.getElementById("tblUploadBody").innerHTML += uploadTemplate;
+
+            // Hide current input.
+            var currentInput = $("#inputFileContainer" + totalFileInputs);
+            currentInput.hide();
+
+            // Increment input tracking counter.
+            totalFileInputs++;
+
+            // Add new input file.
+            var inputFileTemplate = tmpl("template-inputFile", totalFileInputs);
+            document.getElementById("fileUploadControls").innerHTML += inputFileTemplate;
+        }
+
+        /* Function for nealy formatting bytes, self explan.. */
+        function formatBytes(bytes, decimals) {
+            if (bytes == 0) return '0 Bytes';
+            var k = 1000,
+                dm = decimals || 2,
+                sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'],
+                i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+        /* Fixes an issue when encoding URI's */
+        function fixedEncodeURIComponent(str) {
+            return encodeURIComponent(str).replace(/[!'()]/g, escape).replace(/\*/g, "%2A");
+        }
+
+        /* Update the line item's status text */
+        function updateStatus(index, msg, isError) {
+            if (isError)
+                msg = "<span style='color:red;'>" + msg + "</span>";
+            else
+                msg = "<span style='color:black;'>" + msg + "</span>";
+            $("#fileStatus" + index).html(msg);
+        }
+
+        /* Updates the line item's progress percentage */
+        function updateProgress(index, percent) {
+            var progressElement = $("#fileProgress" + index);
+            progressElement.attr('aria-valuenow', percent);
+            progressElement.children().text(percent + '%');
+            progressElement.children().css('width', percent + '%');
+        }
+
+        /* Updates the line item's progress bar's color */
+        function updateProgressBarColour(index, isError) {
+            var progressElement = $("#fileProgress" + index);
+
+            if (isError) {
+                progressElement.children().removeClass('progress-bar-danger');
+                progressElement.children().removeClass('progress-bar-success');
+                progressElement.children().addClass('progress-bar-danger');
+            } else {
+                progressElement.children().removeClass('progress-bar-danger');
+                progressElement.children().removeClass('progress-bar-success');
+                progressElement.children().addClass('progress-bar-success');
+            }
+        }
+
+        /* Toggle setting for enabling and disabling file upload resume support */
+        function resumeChanged(checkbox) {
+            autoResume = checkbox.checked;
+        }
+
+        /* Toggle setting for switching between slow and fast speed uploads */
+        function speedChanged(checkbox) {
+            highSpeed = checkbox.checked;
+        }
+
+        /* Called from line item's start button */
+        function startUpload(fileIndex) {
+            upload(fileIndex);
+        }
+
+        /* Called from line item's stop button */
+        function stopUpload(fileIndex) {
+            var item = fileCollection[fileIndex];
+            item.objFile.haltFlag = true;
+        }
+    </script>
+    }
+    <!-- End Scripts -->
