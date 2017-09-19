@@ -9,6 +9,7 @@
 
 • IE11+, Firefox and Chrome browser support.
 
+
 # How I do integrate this into my project?
 
 There are 2 files you need.
@@ -16,5 +17,9 @@ There are 2 files you need.
 • Copy the FileController.cs
 
 • and Copy the Views/File/Index.cshtml path and file to your solution.
-and thats all.
+
+
+# New features
+
+• They are coming but feel free to request
 
