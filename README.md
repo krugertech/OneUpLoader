@@ -1,2 +1,20 @@
-# OneUpLoader
-A comprehensive example of chunked uploading using Javascript and .Net's Mvc 
+# Features
+• Multiple simultanous file upload
+
+• Auto resume
+
+• Drag and drop (Chrome and FF)
+
+• Full and partial file hashes (via Spark Md5)
+
+• IE11+, Firefox and Chrome browser support.
+
+# How I do integrate this into my project?
+
+There are 2 files you need.
+
+• Copy the FileController.cs
+
+• and Copy the Views/File/Index.cshtml path and file to your solution.
+and thats all.
+
