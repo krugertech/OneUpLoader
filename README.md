@@ -1,3 +1,8 @@
+# Screenshot
+
+![alt text](https://raw.githubusercontent.com/krugertech/OneUpLoader/master/UpDemo.png)
+
+
 # Features
 
 • Multiple simultanous file upload
