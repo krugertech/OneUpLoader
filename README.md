@@ -1,5 +1,8 @@
 # Features
+
 • Multiple simultanous file upload
+
+• Chunked upload (infinite file size)
 
 • Auto resume
 
