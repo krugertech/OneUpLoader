@@ -13,10 +13,10 @@ namespace OneUpLoader.Controllers
             Directory.CreateDirectory(TempUploadPath);            
         }
 
-        public static string TempUploadPath = HostingEnvironment.MapPath("~/Temp/");
+        private static string TempUploadPath = HostingEnvironment.MapPath("~/Temp/");
 
         /// <summary>
-        /// Note issue found with explorer locking media files
+        /// Note: An issue found with explorer locking media files
         /// as it creates a thumbnail for it. 
         /// Mpeg files will usually fail because of this.
         /// One method to work around this is to rename the file extension to .bak while uploading.
@@ -73,7 +73,7 @@ namespace OneUpLoader.Controllers
             }
             catch (Exception ex)
             {
-                throw new Exception($"Error hashing file {filePath}. {ex.ToString()}");
+                throw new Exception($"Error hashing file {filePath}. {ex}");
             }
         }
     }

@@ -9,8 +9,8 @@ namespace OneUpLoader.Controllers
     public class HomeController : Controller
     {
         public ActionResult Index()
-        {
-            return View();
+        {            
+            return RedirectToAction("Index", "File");
         }
 
         public ActionResult About()
